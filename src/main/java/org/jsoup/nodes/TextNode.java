@@ -1,5 +1,6 @@
 package org.jsoup.nodes;
 
+import org.jsoup.EntitiesEscapeInputs;
 import org.jsoup.helper.StringUtil;
 import org.jsoup.helper.Validate;
 
@@ -95,7 +96,12 @@ public class TextNode extends Node {
 
         boolean normaliseWhite = out.prettyPrint() && parent() instanceof Element
                 && !Element.preserveWhitespace(parent());
-        Entities.escape(accum, getWholeText(), out, false, normaliseWhite, false);
+        EntitiesEscapeInputs parameters = new EntitiesEscapeInputs();
+        parameters.setAccum(accum);
+        parameters.setOut(out);
+        parameters.setString(getWholeText());
+        parameters.setNormaliseWhite(normaliseWhite);
+        Entities.escape(parameters);
     }
 
     void outerHtmlTail(StringBuilder accum, int depth, Document.OutputSettings out) {}

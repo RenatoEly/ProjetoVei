@@ -1,5 +1,6 @@
 package org.jsoup.nodes;
 
+import org.jsoup.EntitiesEscapeInputs;
 import org.jsoup.helper.StringUtil;
 import org.jsoup.parser.Parser;
 
@@ -71,31 +72,34 @@ public class Entities {
     
     static String escape(String string, Document.OutputSettings out) {
         StringBuilder accum = new StringBuilder(string.length() * 2);
-        escape(accum, string, out, false, false, false);
+        EntitiesEscapeInputs inputs = new EntitiesEscapeInputs();
+        inputs.setAccum(accum);
+        inputs.setString(string);
+        inputs.setOut(out);
+        escape(inputs);
         return accum.toString();
     }
 
     // this method is ugly, and does a lot. but other breakups cause rescanning and stringbuilder generations
-    static void escape(StringBuilder accum, String string, Document.OutputSettings out,
-                       boolean inAttribute, boolean normaliseWhite, boolean stripLeadingWhite) {
+    static void escape(EntitiesEscapeInputs input) {
 
         boolean lastWasWhite = false;
         boolean reachedNonWhite = false;
-        final EscapeMode escapeMode = out.escapeMode();
-        final CharsetEncoder encoder = out.encoder();
+        final EscapeMode escapeMode = input.getOut().escapeMode();
+        final CharsetEncoder encoder = input.getOut().encoder();
         final CoreCharset coreCharset = CoreCharset.byName(encoder.charset().name());
         final Map<Character, String> map = escapeMode.getMap();
-        final int length = string.length();
+        final int length = input.getString().length();
 
         int codePoint;
         for (int offset = 0; offset < length; offset += Character.charCount(codePoint)) {
-            codePoint = string.codePointAt(offset);
+            codePoint = input.getString().codePointAt(offset);
 
-            if (normaliseWhite) {
+            if (input.isNormaliseWhite()) {
                 if (StringUtil.isWhitespace(codePoint)) {
-                    if ((stripLeadingWhite && !reachedNonWhite) || lastWasWhite)
+                    if ((input.isStripLeadingWhite() && !reachedNonWhite) || lastWasWhite)
                         continue;
-                    accum.append(' ');
+                    input.getAccum().append(' ');
                     lastWasWhite = true;
                     continue;
                 } else {
@@ -109,47 +113,47 @@ public class Entities {
                 // html specific and required escapes:
                 switch (c) {
                     case '&':
-                        accum.append("&amp;");
+                        input.getAccum().append("&amp;");
                         break;
                     case 0xA0:
                         if (escapeMode != EscapeMode.xhtml)
-                            accum.append("&nbsp;");
+                            input.getAccum().append("&nbsp;");
                         else
-                            accum.append("&#xa0;");
+                            input.getAccum().append("&#xa0;");
                         break;
                     case '<':
                         // escape when in character data or when in a xml attribue val; not needed in html attr val
-                        if (!inAttribute || escapeMode == EscapeMode.xhtml)
-                            accum.append("&lt;");
+                        if (!input.isInAttribute() || escapeMode == EscapeMode.xhtml)
+                            input.getAccum().append("&lt;");
                         else
-                            accum.append(c);
+                            input.getAccum().append(c);
                         break;
                     case '>':
-                        if (!inAttribute)
-                            accum.append("&gt;");
+                        if (!input.isInAttribute())
+                            input.getAccum().append("&gt;");
                         else
-                            accum.append(c);
+                            input.getAccum().append(c);
                         break;
                     case '"':
-                        if (inAttribute)
-                            accum.append("&quot;");
+                        if (input.isInAttribute())
+                            input.getAccum().append("&quot;");
                         else
-                            accum.append(c);
+                            input.getAccum().append(c);
                         break;
                     default:
                         if (canEncode(coreCharset, c, encoder))
-                            accum.append(c);
+                            input.getAccum().append(c);
                         else if (map.containsKey(c))
-                            accum.append('&').append(map.get(c)).append(';');
+                            input.getAccum().append('&').append(map.get(c)).append(';');
                         else
-                            accum.append("&#x").append(Integer.toHexString(codePoint)).append(';');
+                            input.getAccum().append("&#x").append(Integer.toHexString(codePoint)).append(';');
                 }
             } else {
                 final String c = new String(Character.toChars(codePoint));
                 if (encoder.canEncode(c)) // uses fallback encoder for simplicity
-                    accum.append(c);
+                    input.getAccum().append(c);
                 else
-                    accum.append("&#x").append(Integer.toHexString(codePoint)).append(';');
+                    input.getAccum().append("&#x").append(Integer.toHexString(codePoint)).append(';');
             }
         }
     }

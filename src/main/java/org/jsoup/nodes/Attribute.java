@@ -1,5 +1,6 @@
 package org.jsoup.nodes;
 
+import org.jsoup.EntitiesEscapeInputs;
 import org.jsoup.helper.Validate;
 
 import java.util.Arrays;
@@ -83,7 +84,12 @@ public class Attribute implements Map.Entry<String, String>, Cloneable  {
         accum.append(key);
         if (!shouldCollapseAttribute(out)) {
             accum.append("=\"");
-            Entities.escape(accum, value, out, true, false, false);
+            EntitiesEscapeInputs parameters = new EntitiesEscapeInputs();
+            parameters.setAccum(accum);
+            parameters.setOut(out);
+            parameters.setString(value);
+            parameters.setInAttribute(true);
+            Entities.escape(parameters);
             accum.append('"');
         }
     }
