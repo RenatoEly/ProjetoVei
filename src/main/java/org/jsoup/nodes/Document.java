@@ -309,8 +309,7 @@ public class Document extends Element {
 	 */
 	private void ensureMetaCharsetElement() {
 		OutputSettings.Syntax syntax = outputSettings().syntax();
-
-		if (!updateMetaCharset || (syntax != OutputSettings.Syntax.html && syntax != OutputSettings.Syntax.xml)) {
+		if (!updateMetaCharset || !(syntax == OutputSettings.Syntax.html || syntax == OutputSettings.Syntax.xml)) {
 			return;
 		}
 
@@ -329,7 +328,9 @@ public class Document extends Element {
 
 			// Remove obsolete elements
 			select("meta[name=charset]").remove();
-		} 
+
+			return;
+		}
 		Node node = childNodes().get(0);
 
 		if (node instanceof XmlDeclaration) {
@@ -357,6 +358,7 @@ public class Document extends Element {
 
 			prependChild(decl);
 		}
+
 	}
 
 
