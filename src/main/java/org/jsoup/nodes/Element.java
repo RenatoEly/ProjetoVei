@@ -1134,11 +1134,11 @@ public class Element extends Node {
     }
 
     void outerHtmlHead(StringBuilder accum, int depth, Document.OutputSettings out) {
-        if (accum.length() > 0 && out.prettyPrint() && (tag.formatAsBlock() || (parent() != null && parent().tag().formatAsBlock()) || out.outline()) )
+        if (accum.length() > 0 && out.prettyPrint() && (tag.formatAsBlock() || (parent() != null && 
+        		parent().tag().formatAsBlock()) || out.outline())){
             indent(accum, depth, out);
-        accum
-                .append("<")
-                .append(tagName());
+        }
+        accum.append("<").append(tagName());
         attributes.html(accum, out);
 
         // selfclosing includes unknown tags, isEmpty defines tags that are always empty

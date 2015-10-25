@@ -39,6 +39,8 @@ public class Entities {
     private static final Map<String, Character> base;
     private static final Map<Character, String> baseByVal;
     private static final Map<Character, String> fullByVal;
+    private static final Map<Character, String[]> escapeMapStr = new HashMap<Character, String[]>();
+    private static final Map<Character, Boolean> escapeMapBool = new HashMap<Character, Boolean>();
 
     private Entities() {}
 
@@ -110,44 +112,25 @@ public class Entities {
             // surrogate pairs, split implementation for efficiency on single char common case (saves creating strings, char[]):
             if (codePoint < Character.MIN_SUPPLEMENTARY_CODE_POINT) {
                 final char c = (char) codePoint;
-                // html specific and required escapes:
-                switch (c) {
-                    case '&':
-                        input.getAccum().append("&amp;");
-                        break;
-                    case 0xA0:
-                        if (escapeMode != EscapeMode.xhtml)
-                            input.getAccum().append("&nbsp;");
-                        else
-                            input.getAccum().append("&#xa0;");
-                        break;
-                    case '<':
-                        // escape when in character data or when in a xml attribue val; not needed in html attr val
-                        if (!input.isInAttribute() || escapeMode == EscapeMode.xhtml)
-                            input.getAccum().append("&lt;");
-                        else
-                            input.getAccum().append(c);
-                        break;
-                    case '>':
-                        if (!input.isInAttribute())
-                            input.getAccum().append("&gt;");
-                        else
-                            input.getAccum().append(c);
-                        break;
-                    case '"':
-                        if (input.isInAttribute())
-                            input.getAccum().append("&quot;");
-                        else
-                            input.getAccum().append(c);
-                        break;
-                    default:
-                        if (canEncode(coreCharset, c, encoder))
-                            input.getAccum().append(c);
-                        else if (map.containsKey(c))
-                            input.getAccum().append('&').append(map.get(c)).append(';');
-                        else
-                            input.getAccum().append("&#x").append(Integer.toHexString(codePoint)).append(';');
+                initializeMaps(String.valueOf(c), input.isInAttribute(), escapeMode);                
+                String[] concat = escapeMapStr.get(c);
+             // html specific and required escapes:
+                if(concat == null){
+                	if (canEncode(coreCharset, c, encoder))
+                        input.getAccum().append(c);
+                    else if (map.containsKey(c))
+                        input.getAccum().append('&').append(map.get(c)).append(';');
+                    else
+                        input.getAccum().append("&#x").append(Integer.toHexString(codePoint)).append(';');
+                } else{
+                	boolean choice = escapeMapBool.get(c);
+                	if (choice){
+                		input.getAccum().append(concat[0]);
+                	} else{
+                		input.getAccum().append(concat[1]);
+                	}
                 }
+                
             } else {
                 final String c = new String(Character.toChars(codePoint));
                 if (encoder.canEncode(c)) // uses fallback encoder for simplicity
@@ -156,6 +139,20 @@ public class Entities {
                     input.getAccum().append("&#x").append(Integer.toHexString(codePoint)).append(';');
             }
         }
+    }
+    
+    private static void initializeMaps(String c, boolean isInAttribute, EscapeMode escapeMode){
+    	escapeMapStr.put('&', new String[]{"&amp;"});
+    	escapeMapStr.put((char) 0xA0, new String[]{"&nbsp;","&#xa0;"});
+    	escapeMapStr.put('<', new String[]{"&lt;",c});
+    	escapeMapStr.put('>', new String[]{"&gt;",c});
+    	escapeMapStr.put('"', new String[]{"&quot;",c});
+    	
+    	escapeMapBool.put('&', true);
+    	escapeMapBool.put((char) 0xA0, escapeMode != EscapeMode.xhtml);
+    	escapeMapBool.put('<', !isInAttribute || escapeMode == EscapeMode.xhtml);
+    	escapeMapBool.put('>', !isInAttribute);
+    	escapeMapBool.put('"', isInAttribute);
     }
 
     static String unescape(String string) {
