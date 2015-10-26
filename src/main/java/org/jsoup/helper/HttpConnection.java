@@ -8,6 +8,7 @@ import org.jsoup.parser.Parser;
 import org.jsoup.parser.TokenQueue;
 
 import javax.net.ssl.*;
+
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
@@ -520,55 +521,17 @@ public class HttpConnection implements Connection {
 
                 // redirect if there's a location header (from 3xx, or 201 etc)
                 if (res.hasHeader(LOCATION) && req.followRedirects()) {
-                    req.method(Method.GET); // always redirect with a get. any data param from original req are dropped.
-                    req.data().clear();
-
-                    String location = res.header(LOCATION);
-                    if (location != null && location.startsWith("http:/") && location.charAt(6) != '/') // fix broken Location: http:/temp/AAG_New/en/index.php
-                        location = location.substring(6);
-                    req.url(StringUtil.resolve(req.url(), encodeUrl(location)));
-
-                    for (Map.Entry<String, String> cookie : res.cookies.entrySet()) { // add response cookies to request (for e.g. login posts)
-                        req.cookie(cookie.getKey(), cookie.getValue());
-                    }
+                    redirect(req,res);
                     return execute(req, res);
                 }
-                if ((status < 200 || status >= 400) && !req.ignoreHttpErrors())
-                        throw new HttpStatusException("HTTP error fetching URL", status, req.url().toString());
-
-                // check that we can handle the returned content type; if not, abort before fetching it
-                String contentType = res.contentType();
-                if (contentType != null
-                        && !req.ignoreContentType()
-                        && !contentType.startsWith("text/")
-                        && !xmlContentTypeRxp.matcher(contentType).matches()
-                        )
-                    throw new UnsupportedMimeTypeException("Unhandled content type. Must be text/*, application/xml, or application/xhtml+xml",
-                            contentType, req.url().toString());
-
+                
+                String contentType = verifyErrors(req, res, status);
                 // switch to the XML parser if content type is xml and not parser not explicitly set
-                if (contentType != null && xmlContentTypeRxp.matcher(contentType).matches()) {
-                    // only flip it if a HttpConnection.Request (i.e. don't presume other impls want it):
-                    if (req instanceof HttpConnection.Request && !((Request) req).parserDefined) {
-                        req.parser(Parser.xmlParser());
-                    }
-                }
+                switchtoxml(contentType, req);
 
                 res.charset = DataUtil.getCharsetFromContentType(res.contentType); // may be null, readInputStream deals with it
                 if (conn.getContentLength() != 0) { // -1 means unknown, chunked. sun throws an IO exception on 500 response with no content when trying to read body
-                    InputStream bodyStream = null;
-                    InputStream dataStream = null;
-                    try {
-                        dataStream = conn.getErrorStream() != null ? conn.getErrorStream() : conn.getInputStream();
-                        bodyStream = res.hasHeaderWithValue(CONTENT_ENCODING, "gzip") ?
-                                new BufferedInputStream(new GZIPInputStream(dataStream)) :
-                                new BufferedInputStream(dataStream);
-
-                        res.byteData = DataUtil.readToByteBuffer(bodyStream, req.maxBodySize());
-                    } finally {
-                        if (bodyStream != null) bodyStream.close();
-                        if (dataStream != null) dataStream.close();
-                    }
+                    buffer(req, res, conn);
                 } else {
                     res.byteData = DataUtil.emptyByteBuffer();
                 }
@@ -580,6 +543,61 @@ public class HttpConnection implements Connection {
 
             res.executed = true;
             return res;
+        }
+        
+        private static void buffer(Connection.Request req, Response res, HttpURLConnection conn) throws IOException{
+        	InputStream bodyStream = null;
+            InputStream dataStream = null;
+            try {
+                dataStream = conn.getErrorStream() != null ? conn.getErrorStream() : conn.getInputStream();
+                bodyStream = res.hasHeaderWithValue(CONTENT_ENCODING, "gzip") ?
+                        new BufferedInputStream(new GZIPInputStream(dataStream)) :
+                        new BufferedInputStream(dataStream);
+
+                res.byteData = DataUtil.readToByteBuffer(bodyStream, req.maxBodySize());
+            } finally {
+                if (bodyStream != null) bodyStream.close();
+                if (dataStream != null) dataStream.close();
+            }
+        }
+        
+        private static void switchtoxml(String contentType, Connection.Request req){
+        	if (contentType != null && xmlContentTypeRxp.matcher(contentType).matches()) {
+                // only flip it if a HttpConnection.Request (i.e. don't presume other impls want it):
+                if (req instanceof HttpConnection.Request && !((Request) req).parserDefined) {
+                    req.parser(Parser.xmlParser());
+                }
+            }
+        }
+        
+        private static String verifyErrors(Connection.Request req, Response res, int status) throws HttpStatusException, UnsupportedMimeTypeException{
+        	if ((status < 200 || status >= 400) && !req.ignoreHttpErrors())
+                throw new HttpStatusException("HTTP error fetching URL", status, req.url().toString());
+
+        // check that we can handle the returned content type; if not, abort before fetching it
+        String contentType = res.contentType();
+        if (contentType != null
+                && !req.ignoreContentType()
+                && !contentType.startsWith("text/")
+                && !xmlContentTypeRxp.matcher(contentType).matches()
+                )
+            throw new UnsupportedMimeTypeException("Unhandled content type. Must be text/*, application/xml, or application/xhtml+xml",
+                    contentType, req.url().toString());
+        return contentType;
+        }
+        
+        private static void redirect(Connection.Request req, Response res) throws MalformedURLException{
+        	req.method(Method.GET); // always redirect with a get. any data param from original req are dropped.
+            req.data().clear();
+
+            String location = res.header(LOCATION);
+            if (location != null && location.startsWith("http:/") && location.charAt(6) != '/') // fix broken Location: http:/temp/AAG_New/en/index.php
+                location = location.substring(6);
+            req.url(StringUtil.resolve(req.url(), encodeUrl(location)));
+
+            for (Map.Entry<String, String> cookie : res.cookies.entrySet()) { // add response cookies to request (for e.g. login posts)
+                req.cookie(cookie.getKey(), cookie.getValue());
+            }
         }
 
         public int statusCode() {
